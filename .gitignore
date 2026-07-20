@@ -9,9 +9,9 @@ venv/
 env/
 .ipynb_checkpoints/
 
-# Data local / exports
+# Data local / exports (versionamos solo el snapshot del sheet)
 data/*.csv
-!data/sample_vix.csv
+!data/vix_q1_full.csv
 
 # OS / editores
 .DS_Store

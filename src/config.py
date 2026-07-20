@@ -26,6 +26,7 @@ class ClientConfig:
     rocket_channels: list[str] = field(default_factory=lambda: ["rocket"])
     organic_channels: list[str] = field(default_factory=list)
     channel_groups: dict[str, str] = field(default_factory=dict)
+    data_source: dict = field(default_factory=dict)
 
     @property
     def app_ids(self) -> list[str]:
@@ -61,6 +62,7 @@ def load_client(slug: str) -> ClientConfig:
         rocket_channels=data.get("rocket_channels", ["rocket"]),
         organic_channels=data.get("organic_channels", []),
         channel_groups=data.get("channel_groups", {}),
+        data_source=data.get("data_source", {}),
     )
 
 

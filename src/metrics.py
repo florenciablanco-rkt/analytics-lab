@@ -82,39 +82,31 @@ METRIC_LABELS = {
 }
 
 
-def rocket_vs_rest(df: pd.DataFrame, cfg: ClientConfig,
-                   min_installs: int = 100) -> dict:
-    """Compara Rocket contra el resto de los canales PAGOS.
+def rocket_vs_rest(df: pd.DataFrame, cfg: ClientConfig) -> dict:
+    """Compara Rocket contra el promedio del resto de los canales PAGOS.
 
-    Devuelve, por métrica de calidad:
-      - rocket: valor de Rocket (pooled)
-      - resto_pooled: mismo cálculo sobre todos los canales pagos no-Rocket juntos
-      - resto_mediana: mediana del valor por canal entre pagos no-Rocket con
-        installs >= min_installs (evita ruido de canales con 2 installs)
-      - delta_pct: Rocket vs resto_pooled
-      - mejor: True si Rocket queda mejor que el resto (según HIGHER_IS_BETTER)
+    El "resto" es el pooled de todos los canales pagos no-Rocket (revenue total
+    sobre installs totales, etc.), que es el promedio ponderado real del resto.
+    Devuelve, por métrica de calidad: rocket, resto, delta_pct y mejor.
     """
     by_ch = aggregate_by_channel(df)
     rocket = by_ch[by_ch["es_rocket"]]
     paid_rest = by_ch[(~by_ch["es_rocket"]) & (~by_ch["es_organico"])]
 
     r = _pool(rocket)
-    rest_pool = _pool(paid_rest)
-    rest_signif = paid_rest[paid_rest["installs"] >= min_installs]
+    rest = _pool(paid_rest)
 
-    out = {"_rocket_totals": r, "_rest_totals": rest_pool, "metrics": {}}
+    out = {"_rocket_totals": r, "_rest_totals": rest, "metrics": {}}
     for m in ("arpi", "ticket_promedio", "tasa_compra"):
         rv = r.get(m, np.nan)
-        pooled = rest_pool.get(m, np.nan)
-        median = rest_signif[m].median() if not rest_signif.empty else np.nan
-        delta = ((rv - pooled) / pooled * 100) if pooled and not np.isnan(pooled) else np.nan
-        better = (rv >= pooled) if m in HIGHER_IS_BETTER else (rv <= pooled)
+        rest_v = rest.get(m, np.nan)
+        delta = ((rv - rest_v) / rest_v * 100) if rest_v and not np.isnan(rest_v) else np.nan
+        better = (rv >= rest_v) if m in HIGHER_IS_BETTER else (rv <= rest_v)
         out["metrics"][m] = {
             "label": METRIC_LABELS[m],
             "rocket": rv,
-            "resto_pooled": pooled,
-            "resto_mediana": median,
+            "resto": rest_v,
             "delta_pct": delta,
-            "mejor": bool(better) if not (np.isnan(rv) or np.isnan(pooled)) else None,
+            "mejor": bool(better) if not (np.isnan(rv) or np.isnan(rest_v)) else None,
         }
     return out
