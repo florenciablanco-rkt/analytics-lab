@@ -82,16 +82,27 @@ METRIC_LABELS = {
 }
 
 
-def rocket_vs_rest(df: pd.DataFrame, cfg: ClientConfig) -> dict:
+def paid_medias(df: pd.DataFrame) -> list[str]:
+    """Canales pagos no-Rocket disponibles, ordenados por revenue desc."""
+    by_ch = aggregate_by_channel(df)
+    medias = by_ch[(~by_ch["es_rocket"]) & (~by_ch["es_organico"])]
+    return medias.sort_values("revenue_usd", ascending=False)["canal"].tolist()
+
+
+def rocket_vs_rest(df: pd.DataFrame, cfg: ClientConfig,
+                   rest_channels: list[str] | None = None) -> dict:
     """Compara Rocket contra el promedio del resto de los canales PAGOS.
 
-    El "resto" es el pooled de todos los canales pagos no-Rocket (revenue total
-    sobre installs totales, etc.), que es el promedio ponderado real del resto.
+    El "resto" es el pooled de los canales pagos no-Rocket (revenue total sobre
+    installs totales, etc.), que es el promedio ponderado real del resto. Si se
+    pasa `rest_channels`, el resto se restringe a esas medias (filtro de la UI).
     Devuelve, por métrica de calidad: rocket, resto, delta_pct y mejor.
     """
     by_ch = aggregate_by_channel(df)
     rocket = by_ch[by_ch["es_rocket"]]
     paid_rest = by_ch[(~by_ch["es_rocket"]) & (~by_ch["es_organico"])]
+    if rest_channels is not None:
+        paid_rest = paid_rest[paid_rest["canal"].isin(rest_channels)]
 
     r = _pool(rocket)
     rest = _pool(paid_rest)

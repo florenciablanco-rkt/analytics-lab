@@ -104,20 +104,32 @@ if df.empty:
 # --------------------------------------------------------------------------- #
 # Sección 1 — Rocket vs. resto (headline)
 # --------------------------------------------------------------------------- #
-comp = metrics.rocket_vs_rest(df, cfg)
+st.markdown("#### Rocket vs. resto de canales pagos")
+
+medias = metrics.paid_medias(df)
+sel_medias = st.multiselect(
+    "Comparar Rocket contra (medias)", medias, default=medias,
+    help="Elegí contra qué canales pagos se compara Rocket. Los 3 KPIs de abajo "
+         "se recalculan sobre las medias seleccionadas.")
+
+comp = metrics.rocket_vs_rest(df, cfg, rest_channels=sel_medias)
 r_tot, rest_tot = comp["_rocket_totals"], comp["_rest_totals"]
 wins = sum(1 for m in comp["metrics"].values() if m["mejor"] is True)
 evaluables = sum(1 for m in comp["metrics"].values() if m["mejor"] is not None)
 
-st.markdown("#### Rocket vs. resto de canales pagos")
 if r_tot["installs"] == 0:
     st.warning("Rocket no tiene installs en este período — no se puede comparar. "
                "Revisá el mapeo de canales de Rocket en la config del cliente.")
+elif not sel_medias:
+    st.info("Elegí al menos una media para comparar contra Rocket.")
 else:
+    n = len(sel_medias)
+    detalle = ("todos los canales pagos no-Rocket" if n == len(medias)
+               else f"{n} media{'s' if n > 1 else ''} seleccionada{'s' if n > 1 else ''}")
     st.markdown(
-        f"En este período Rocket queda **mejor que el resto de los canales pagos "
-        f"en {wins} de {evaluables}** métricas de calidad. El *resto* es el "
-        f"promedio ponderado de todos los canales pagos no-Rocket (excluye orgánico).")
+        f"En este período Rocket queda **mejor en {wins} de {evaluables}** "
+        f"métricas de calidad. El *resto* es el promedio ponderado de {detalle} "
+        f"(excluye orgánico).")
     cols = st.columns(3)
     for col, (key, m) in zip(cols, comp["metrics"].items()):
         f = fmt_metric(key)
