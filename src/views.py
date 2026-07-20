@@ -101,8 +101,8 @@ def render_q2(cfg: ClientConfig, start: date, end: date) -> None:
     tipo_sel = ca.radio("Tipo (excluyente)", ["UA", "RTG"], key="q2tipo")
     sub = df[df["tipo"] == tipo_sel].copy()
     canales = sub.groupby("canal")[metric].sum().sort_values(ascending=False).index.tolist()
-    sel = cb.multiselect("Medias a mostrar (por default todas)", canales, default=canales,
-                         key="q2canales")
+    sel = cb.multiselect("Medias a mostrar (top 8 por default; agregá las que quieras)",
+                         canales, default=canales[:8], key="q2canales")
     sub = sub[sub["canal"].isin(sel)]
     if sub.empty:
         st.warning("No hay data para ese tipo / esas medias."); return
