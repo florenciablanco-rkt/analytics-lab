@@ -31,12 +31,7 @@ def _source_caption(label: str, live: bool) -> None:
 
 
 def _empty(sql_file: str, tab: str) -> None:
-    st.info(
-        f"Todavía no hay datos para esta vista.\n\n"
-        f"1. Corré `queries/{sql_file}` en Athena (filtrá a Vix: "
-        f"`app_id = 'id1531467766'`).\n"
-        f"2. Pegá la salida en la hoja **{tab}** del Google Sheet.\n\n"
-        f"La vista se actualiza sola al refrescar.")
+    st.info("Todavía no hay datos para esta vista.")
 
 
 def _filter_dates(df: pd.DataFrame, start: date, end: date) -> pd.DataFrame:
