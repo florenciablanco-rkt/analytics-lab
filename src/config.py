@@ -25,6 +25,7 @@ class ClientConfig:
     install_event: str = "install"
     rocket_channels: list[str] = field(default_factory=lambda: ["rocket"])
     rocket_channel_patterns: list[str] = field(default_factory=list)
+    rocket_label: str = "Rocket Lab"
     organic_channels: list[str] = field(default_factory=list)
     channel_groups: dict[str, str] = field(default_factory=dict)
     data_source: dict = field(default_factory=dict)
@@ -49,6 +50,10 @@ class ClientConfig:
             return True
         return canal in self.rocket_channels
 
+    def display_channel(self, canal: str) -> str:
+        """Nombre a mostrar: los canales de Rocket se colapsan en rocket_label."""
+        return self.rocket_label if self.is_rocket(canal) else str(canal)
+
     def is_organic(self, canal: str) -> bool:
         return canal in self.organic_channels
 
@@ -65,6 +70,7 @@ def load_client(slug: str) -> ClientConfig:
         install_event=data.get("install_event", "install"),
         rocket_channels=data.get("rocket_channels", ["rocket"]),
         rocket_channel_patterns=data.get("rocket_channel_patterns", []),
+        rocket_label=data.get("rocket_label", "Rocket Lab"),
         organic_channels=data.get("organic_channels", []),
         channel_groups=data.get("channel_groups", {}),
         data_source=data.get("data_source", {}),

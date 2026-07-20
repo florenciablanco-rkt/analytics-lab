@@ -42,6 +42,7 @@ rocket_channel_patterns:
   - "lychee"
   - "rocket"
 rocket_channels: []
+rocket_label: "Rocket Lab"          # los canales de Rocket se muestran fusionados con este nombre
 
 # Canales orgánicos / no pagos (línea base; se excluyen del benchmark de pagos).
 organic_channels:
@@ -51,8 +52,8 @@ organic_channels:
 
 # Mapeo de canal crudo -> grupo legible. Lo no mapeado cae en "Otros".
 channel_groups:
-  rocket:              "Rocket"
-  lychee:              "Rocket"          # confirmado: lychee es Rocket
+  rocket:              "Rocket Lab"
+  lychee:              "Rocket Lab"      # confirmado: lychee es Rocket
   appgradear424:       "AppGradear"
   googleadwords_int:   "Google"
   dv360_int:           "Google"

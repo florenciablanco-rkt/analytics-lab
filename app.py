@@ -74,10 +74,10 @@ with tabs[0]:
     if df.empty:
         st.warning("No hay datos en el período seleccionado.")
     else:
-        st.markdown("#### Rocket vs. resto de canales pagos")
+        st.markdown("#### Rocket Lab vs. resto de canales pagos")
         medias = metrics.paid_medias(df)
         sel_medias = st.multiselect(
-            "Comparar Rocket contra (medias)", medias, default=[],
+            "Comparar Rocket Lab contra (medias)", medias, default=[],
             placeholder="Todas las medias pagas — o elegí una o varias",
             help="Vacío = todas. Los 3 KPIs de abajo se recalculan sobre lo elegido.")
         comp = metrics.rocket_vs_rest(df, cfg, rest_channels=sel_medias or None)
@@ -86,12 +86,12 @@ with tabs[0]:
         evaluables = sum(1 for m in comp["metrics"].values() if m["mejor"] is not None)
 
         if r_tot["installs"] == 0:
-            st.warning("Rocket no tiene installs en este período. Revisá el mapeo "
+            st.warning("Rocket Lab no tiene installs en este período. Revisá el mapeo "
                        "de canales de Rocket en la config del cliente.")
         else:
             detalle = ("todos los canales pagos no-Rocket" if not sel_medias
                        else f"{len(sel_medias)} media(s) seleccionada(s)")
-            st.markdown(f"Rocket queda **mejor en {wins} de {evaluables}** métricas de "
+            st.markdown(f"Rocket Lab queda **mejor en {wins} de {evaluables}** métricas de "
                         f"calidad. El *resto* es el promedio ponderado de {detalle}.")
             cols = st.columns(3)
             for col, (key, m) in zip(cols, comp["metrics"].items()):
@@ -110,10 +110,10 @@ with tabs[0]:
         c1, c2, c3, c4 = st.columns(4)
         tot_rev = df[~df["es_organico"]]["revenue_usd"].sum()
         share = (r_tot["revenue_usd"] / tot_rev * 100) if tot_rev else np.nan
-        c1.markdown(theme.kpi_card("Revenue Rocket (total)", money(r_tot["revenue_usd"])), unsafe_allow_html=True)
-        c2.markdown(theme.kpi_card("Share de revenue Rocket", pct(share).replace("+", "")), unsafe_allow_html=True)
-        c3.markdown(theme.kpi_card("Installs Rocket", integer(r_tot["installs"])), unsafe_allow_html=True)
-        c4.markdown(theme.kpi_card("Compradores Rocket", integer(r_tot["compradores_unicos"])), unsafe_allow_html=True)
+        c1.markdown(theme.kpi_card("Revenue Rocket Lab (total)", money(r_tot["revenue_usd"])), unsafe_allow_html=True)
+        c2.markdown(theme.kpi_card("Share de revenue Rocket Lab", pct(share).replace("+", "")), unsafe_allow_html=True)
+        c3.markdown(theme.kpi_card("Installs Rocket Lab", integer(r_tot["installs"])), unsafe_allow_html=True)
+        c4.markdown(theme.kpi_card("Compradores Rocket Lab", integer(r_tot["compradores_unicos"])), unsafe_allow_html=True)
 
         st.markdown('<div class="rl-grad-bar"></div>', unsafe_allow_html=True)
         st.markdown("#### Ranking por canal")

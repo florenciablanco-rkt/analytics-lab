@@ -63,6 +63,7 @@ def render_q2(cfg: ClientConfig, start: date, end: date) -> None:
     if df.empty:
         _empty("q2_mix_ua_rtg_por_canal_por_dia.sql", "Q2 - Mix UA vs RTG"); return
     df = coerce_numeric(df, ["devices", "compradores", "revenue_usd"])
+    df["canal"] = df["canal"].map(cfg.display_channel)   # Rocket fusionado
     df = _filter_dates(df, start, end)
     if df.empty:
         st.warning("Sin datos en el período."); return
@@ -127,6 +128,7 @@ def render_q3(cfg: ClientConfig, start: date, end: date) -> None:
     if df.empty:
         _empty("q3_evolucion_semanal.sql", "Q3 - Evolucion semanal"); return
     df = coerce_numeric(df, ["installs", "compradores", "revenue_usd"])
+    df["canal"] = df["canal"].map(cfg.display_channel)   # Rocket fusionado
     df["semana"] = pd.to_datetime(df["semana"], errors="coerce")
     df = _filter_dates(df, start, end)
     if df.empty:
@@ -157,6 +159,7 @@ def render_q4(cfg: ClientConfig, start: date, end: date) -> None:
         _empty("q4_tasa_repeticion_por_canal_por_mes.sql", "Q4 - Tasa de repeticion"); return
     df = coerce_numeric(df, ["compradores", "recompradores_30d",
                              "tasa_recompra_30d_pct", "ltv_promedio"])
+    df["canal"] = df["canal"].map(cfg.display_channel)   # Rocket fusionado
     df = _filter_dates(df, start, end)
     if df.empty:
         st.warning("Sin datos en el período."); return
@@ -180,7 +183,7 @@ def render_q4(cfg: ClientConfig, start: date, end: date) -> None:
     rk = _rate(g[g["es_rocket"]])
     rest = _rate(g[~g["es_rocket"]])
     c1, c2 = st.columns(2)
-    c1.markdown(theme.kpi_card("Recompra 30d — Rocket",
+    c1.markdown(theme.kpi_card("Recompra 30d — Rocket Lab",
                 "—" if np.isnan(rk) else f"{rk:.1f}%"), unsafe_allow_html=True)
     c2.markdown(theme.kpi_card("Recompra 30d — resto",
                 "—" if np.isnan(rest) else f"{rest:.1f}%"), unsafe_allow_html=True)
@@ -219,6 +222,8 @@ def render_q5(cfg: ClientConfig, start: date, end: date) -> None:
     if df.empty:
         _empty("q5_journey_completo_por_dia.sql", "Q5 - Journey"); return
     df = coerce_numeric(df, ["compradores", "revenue_usd"])
+    for _c in ("install_canal", "conversion_canal"):        # Rocket fusionado
+        df[_c] = df[_c].map(cfg.display_channel)
     df = _filter_dates(df, start, end)
     if df.empty:
         st.warning("Sin datos en el período."); return
@@ -233,12 +238,12 @@ def render_q5(cfg: ClientConfig, start: date, end: date) -> None:
                        ~_rocket_mask(cfg, df["conversion_canal"])][val].sum()
     c1, c2 = st.columns(2)
     sh = (rocket_install / total * 100) if total else 0
-    c1.markdown(theme.kpi_card(f"{LABELS[val]} con install de Rocket",
+    c1.markdown(theme.kpi_card(f"{LABELS[val]} con install de Rocket Lab",
                 money(rocket_install) if val == "revenue_usd" else integer(rocket_install),
                 f"<span style='color:#696A6B'>{sh:.1f}% del total</span>"), unsafe_allow_html=True)
-    c2.markdown(theme.kpi_card("Rocket instaló → otro canal convirtió",
+    c2.markdown(theme.kpi_card("Rocket Lab instaló → otro canal convirtió",
                 money(rocket_assist) if val == "revenue_usd" else integer(rocket_assist),
-                "<span style='color:#696A6B'>usuarios que Rocket generó y otro cerró</span>"),
+                "<span style='color:#696A6B'>usuarios que Rocket Lab generó y otro cerró</span>"),
                 unsafe_allow_html=True)
 
     st.markdown("###### Matriz install → conversión (top canales)")
@@ -254,8 +259,8 @@ def render_q5(cfg: ClientConfig, start: date, end: date) -> None:
     st.plotly_chart(fig, use_container_width=True)
 
     # Aporte de Rocket: de cada canal de conversión, qué % vino de un install de Rocket
-    st.markdown("###### Aporte de Rocket a la conversión de cada canal")
-    st.caption("De lo que convierte cada canal, qué parte son usuarios que Rocket instaló.")
+    st.markdown("###### Aporte de Rocket Lab a la conversión de cada canal")
+    st.caption("De lo que convierte cada canal, qué parte son usuarios que Rocket Lab instaló.")
     conv = df.groupby("conversion_canal", as_index=False)[val].sum().rename(columns={val: "total"})
     assist = (df[_rocket_mask(cfg, df["install_canal"])]
               .groupby("conversion_canal", as_index=False)[val].sum().rename(columns={val: "rocket"}))
@@ -264,8 +269,8 @@ def render_q5(cfg: ClientConfig, start: date, end: date) -> None:
     mm = mm[mm["total"] > 0].nlargest(12, "total").sort_values("share_rocket_pct")
     figa = px.bar(mm, x="share_rocket_pct", y="conversion_canal", orientation="h",
                   color_discrete_sequence=[theme.VIOLET],
-                  labels={"share_rocket_pct": "% con install de Rocket", "conversion_canal": ""})
-    figa.update_traces(hovertemplate="%{y}<br>%{x:.1f}% con install de Rocket<extra></extra>")
+                  labels={"share_rocket_pct": "% con install de Rocket Lab", "conversion_canal": ""})
+    figa.update_traces(hovertemplate="%{y}<br>%{x:.1f}% con install de Rocket Lab<extra></extra>")
     figa.update_layout(height=430, **PLOT)
     st.plotly_chart(figa, use_container_width=True)
 

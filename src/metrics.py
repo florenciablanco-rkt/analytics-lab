@@ -28,6 +28,7 @@ def normalize(df: pd.DataFrame, cfg: ClientConfig) -> pd.DataFrame:
     df["grupo"] = df["canal"].map(cfg.group_of)
     df["es_rocket"] = df["canal"].map(cfg.is_rocket)
     df["es_organico"] = df["canal"].map(cfg.is_organic)
+    df["canal_display"] = df["canal"].map(cfg.display_channel)  # Rocket fusionado
     return df
 
 
@@ -44,16 +45,18 @@ def _ratios(installs, compradores, compras, revenue) -> dict:
 
 
 def aggregate_by_channel(df: pd.DataFrame) -> pd.DataFrame:
-    """Agrega sobre el período por canal, recalculando ratios desde las sumas."""
-    g = df.groupby("canal", as_index=False).agg(
+    """Agrega sobre el período por canal de display (Rocket fusionado en uno solo),
+    recalculando ratios desde las sumas."""
+    key = "canal_display" if "canal_display" in df.columns else "canal"
+    g = df.groupby(key, as_index=False).agg(
         installs=("installs", "sum"),
         compradores_unicos=("compradores_unicos", "sum"),
         total_compras=("total_compras", "sum"),
         revenue_usd=("revenue_usd", "sum"),
-        es_rocket=("es_rocket", "first"),
-        es_organico=("es_organico", "first"),
+        es_rocket=("es_rocket", "max"),
+        es_organico=("es_organico", "max"),
         grupo=("grupo", "first"),
-    )
+    ).rename(columns={key: "canal"})
     g["arpi"] = g["revenue_usd"] / g["installs"].replace(0, np.nan)
     g["ticket_promedio"] = g["revenue_usd"] / g["total_compras"].replace(0, np.nan)
     g["tasa_compra"] = g["compradores_unicos"] / g["installs"].replace(0, np.nan)
