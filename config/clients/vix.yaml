@@ -20,11 +20,17 @@ install_event: "install"
 # -----------------------------------------------------------------------------
 # Fuente de datos
 # -----------------------------------------------------------------------------
-# Prioridad: Athena (si hay credenciales) > Google Sheet en vivo > snapshot local.
+# Prioridad por query: Athena (si hay credenciales) > tab del Sheet > snapshot.
+# Cada query tiene su propia hoja (gid) en el Google Sheet.
 data_source:
   google_sheet_id: "1kbF-bTzxjYmfvih8BjHz-9cvRG14xnulSFrrH1ArTOM"
-  google_sheet_gid: "1788020183"          # hoja "Agregado por canal por semana"
-  snapshot: "data/vix_q1_full.csv"        # copia local (fallback si el sheet es privado)
+  queries:
+    q1: {gid: "1788020183", snapshot: "data/vix_q1_full.csv"}   # Agregado por canal por semana
+    q2: {gid: "1564743920"}                                     # Mix UA vs RTG
+    q3: {gid: "739123035"}                                      # Evolución semanal
+    q4: {gid: "291809667"}                                      # Tasa de repetición
+    q5: {gid: "1531089231"}                                     # Journey
+    q6: {gid: "1422906474"}                                     # LTV cohorte
 
 # -----------------------------------------------------------------------------
 # Normalización de canales (capa 1 del producto)
