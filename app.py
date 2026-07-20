@@ -108,11 +108,13 @@ st.markdown("#### Rocket vs. resto de canales pagos")
 
 medias = metrics.paid_medias(df)
 sel_medias = st.multiselect(
-    "Comparar Rocket contra (medias)", medias, default=medias,
-    help="Elegí contra qué canales pagos se compara Rocket. Los 3 KPIs de abajo "
-         "se recalculan sobre las medias seleccionadas.")
+    "Comparar Rocket contra (medias)", medias, default=[],
+    placeholder="Todas las medias pagas — o elegí una o varias",
+    help="Desplegable: elegí contra qué canales pagos se compara Rocket. "
+         "Vacío = todas. Los 3 KPIs de abajo se recalculan sobre lo elegido.")
 
-comp = metrics.rocket_vs_rest(df, cfg, rest_channels=sel_medias)
+rest_channels = sel_medias or None          # vacío = todas las medias pagas
+comp = metrics.rocket_vs_rest(df, cfg, rest_channels=rest_channels)
 r_tot, rest_tot = comp["_rocket_totals"], comp["_rest_totals"]
 wins = sum(1 for m in comp["metrics"].values() if m["mejor"] is True)
 evaluables = sum(1 for m in comp["metrics"].values() if m["mejor"] is not None)
@@ -120,12 +122,10 @@ evaluables = sum(1 for m in comp["metrics"].values() if m["mejor"] is not None)
 if r_tot["installs"] == 0:
     st.warning("Rocket no tiene installs en este período — no se puede comparar. "
                "Revisá el mapeo de canales de Rocket en la config del cliente.")
-elif not sel_medias:
-    st.info("Elegí al menos una media para comparar contra Rocket.")
 else:
-    n = len(sel_medias)
-    detalle = ("todos los canales pagos no-Rocket" if n == len(medias)
-               else f"{n} media{'s' if n > 1 else ''} seleccionada{'s' if n > 1 else ''}")
+    detalle = ("todos los canales pagos no-Rocket" if not sel_medias
+               else f"{len(sel_medias)} media{'s' if len(sel_medias) > 1 else ''} "
+                    f"seleccionada{'s' if len(sel_medias) > 1 else ''}")
     st.markdown(
         f"En este período Rocket queda **mejor en {wins} de {evaluables}** "
         f"métricas de calidad. El *resto* es el promedio ponderado de {detalle} "
@@ -147,7 +147,7 @@ st.markdown("")
 c1, c2, c3, c4 = st.columns(4)
 tot_rev = df[~df["es_organico"]]["revenue_usd"].sum()
 share = (r_tot["revenue_usd"] / tot_rev * 100) if tot_rev else np.nan
-c1.markdown(theme.kpi_card("Revenue Rocket", money(r_tot["revenue_usd"])), unsafe_allow_html=True)
+c1.markdown(theme.kpi_card("Revenue Rocket (total)", money(r_tot["revenue_usd"])), unsafe_allow_html=True)
 c2.markdown(theme.kpi_card("Share de revenue Rocket", pct(share).replace("+", "")),
             unsafe_allow_html=True)
 c3.markdown(theme.kpi_card("Installs Rocket", integer(r_tot["installs"])), unsafe_allow_html=True)
