@@ -296,6 +296,16 @@ def render_q6(cfg: ClientConfig, start: date, end: date) -> None:
     if df.empty:
         st.warning("Sin datos en el período."); return
 
+    if "canal" in df.columns:
+        seg = st.radio("Segmento", ["Todos", "Rocket", "Resto (no-Rocket)"],
+                       horizontal=True, key="q6seg")
+        if seg == "Rocket":
+            df = df[df["canal"].map(cfg.is_rocket)]
+        elif seg.startswith("Resto"):
+            df = df[~df["canal"].map(cfg.is_rocket)]
+        if df.empty:
+            st.warning("Sin datos para ese segmento."); return
+
     for c in ["revenue_30d", "revenue_60d", "revenue_total"]:
         df[c] = df[c].fillna(0)
     g = df.groupby("cohorte_mes", as_index=False).agg(

@@ -221,6 +221,7 @@ def q6_ltv_cohorte(cfg: ClientConfig, start: date, end: date,
     return f"""WITH installs AS (
     SELECT
         app_id,
+        COALESCE(partner, pid)                          AS canal,
         mmp_device_id,
         MIN(date_parse(substr(dt, 1, 10), '%Y-%m-%d'))  AS install_date,
         substr(MIN(dt), 1, 7)                           AS cohorte_mes
@@ -228,7 +229,7 @@ def q6_ltv_cohorte(cfg: ClientConfig, start: date, end: date,
     WHERE app_id IN ({_in_list(apps)})
         AND event_name = '{inst}'
 {_date_filter(start, end)}
-    GROUP BY app_id, mmp_device_id
+    GROUP BY app_id, COALESCE(partner, pid), mmp_device_id
 ),
 purchases AS (
     SELECT
@@ -243,6 +244,7 @@ purchases AS (
 SELECT
     i.cohorte_mes,
     i.app_id,
+    i.canal,
     COUNT(DISTINCT i.mmp_device_id)                                                   AS installs,
     COUNT(DISTINCT CASE WHEN p.purchase_date IS NOT NULL THEN i.mmp_device_id END)    AS compradores,
     SUM(CASE WHEN date_diff('day', i.install_date, p.purchase_date) <= 30
@@ -255,8 +257,8 @@ FROM installs i
 LEFT JOIN purchases p
     ON  i.mmp_device_id = p.mmp_device_id
     AND i.app_id        = p.app_id
-GROUP BY i.cohorte_mes, i.app_id
-ORDER BY i.cohorte_mes
+GROUP BY i.cohorte_mes, i.app_id, i.canal
+ORDER BY i.cohorte_mes, installs DESC
 """
 
 
