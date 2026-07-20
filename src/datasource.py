@@ -26,7 +26,7 @@ QUERY_SPECS = {
     "q1": (queries.q1_weekly_by_channel, {"semana", "canal", "installs", "revenue_usd"}),
     "q2": (queries.q2_mix_ua_rtg,        {"canal", "is_retargeting", "revenue_usd"}),
     "q3": (queries.q3_weekly_evolution,  {"semana", "canal", "installs", "revenue_usd"}),
-    "q4": (queries.q4_repeat_rate,       {"canal", "compradores_unicos", "tasa_repeticion_pct"}),
+    "q4": (queries.q4_repeat_rate,       {"canal", "compradores", "tasa_recompra_30d_pct"}),
     "q5": (queries.q5_journey,           {"install_canal", "conversion_canal", "compradores"}),
     "q6": (queries.q6_ltv_cohorte,       {"cohorte_mes", "installs", "ltv_por_install"}),
 }

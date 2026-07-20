@@ -24,6 +24,7 @@ class ClientConfig:
     purchase_event: str
     install_event: str = "install"
     rocket_channels: list[str] = field(default_factory=lambda: ["rocket"])
+    rocket_channel_patterns: list[str] = field(default_factory=list)
     organic_channels: list[str] = field(default_factory=list)
     channel_groups: dict[str, str] = field(default_factory=dict)
     data_source: dict = field(default_factory=dict)
@@ -43,6 +44,9 @@ class ClientConfig:
         return self.channel_groups.get(canal, "Otros")
 
     def is_rocket(self, canal: str) -> bool:
+        c = str(canal).lower()
+        if any(p.lower() in c for p in self.rocket_channel_patterns):
+            return True
         return canal in self.rocket_channels
 
     def is_organic(self, canal: str) -> bool:
@@ -60,6 +64,7 @@ def load_client(slug: str) -> ClientConfig:
         purchase_event=data["purchase_event"],
         install_event=data.get("install_event", "install"),
         rocket_channels=data.get("rocket_channels", ["rocket"]),
+        rocket_channel_patterns=data.get("rocket_channel_patterns", []),
         organic_channels=data.get("organic_channels", []),
         channel_groups=data.get("channel_groups", {}),
         data_source=data.get("data_source", {}),

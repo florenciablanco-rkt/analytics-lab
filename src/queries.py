@@ -110,37 +110,54 @@ ORDER BY 1, 2
 # --------------------------------------------------------------------------- #
 def q4_repeat_rate(cfg: ClientConfig, start: date, end: date,
                    app_ids: list[str] | None = None) -> str:
-    """Compradores únicos, repetidores, tasa de repetición (%) y LTV promedio
-    por comprador, por mes y canal. Mensual: la repetición diaria no es
-    estadísticamente significativa."""
+    """Recompra a nivel device dentro de 30 días del primer purchase, por canal
+    y cohorte (mes del primer purchase). Más significativa que la repetición por
+    mes calendario: mide si el comprador vuelve a comprar en su ventana de 30d."""
     apps = app_ids or cfg.app_ids
     buy = cfg.purchase_event
-    return f"""WITH compras_device AS (
+    return f"""WITH purchases AS (
     SELECT
-        substr(dt, 1, 7)                AS mes,
         app_id,
-        COALESCE(partner, pid)          AS canal,
+        COALESCE(partner, pid)                      AS canal,
         mmp_device_id,
-        COUNT(*)                        AS num_compras,
-        SUM(event_revenue_usd)          AS revenue_total
+        date_parse(substr(dt, 1, 10), '%Y-%m-%d')   AS pdate,
+        event_revenue_usd
     FROM prod_tracking.postbacks_typed
     WHERE app_id IN ({_in_list(apps)})
         AND event_name = '{buy}'
 {_date_filter(start, end)}
-    GROUP BY 1, 2, 3, 4
+),
+first_p AS (
+    SELECT app_id, canal, mmp_device_id, MIN(pdate) AS first_date
+    FROM purchases
+    GROUP BY app_id, canal, mmp_device_id
+),
+device_stats AS (
+    SELECT
+        f.app_id, f.canal, f.mmp_device_id,
+        substr(CAST(f.first_date AS varchar), 1, 7)  AS cohorte_mes,
+        MAX(CASE WHEN p.pdate > f.first_date
+                  AND date_diff('day', f.first_date, p.pdate) <= 30
+                 THEN 1 ELSE 0 END)                   AS recompro_30d,
+        SUM(p.event_revenue_usd)                      AS revenue_device
+    FROM first_p f
+    JOIN purchases p
+        ON  f.mmp_device_id = p.mmp_device_id
+        AND f.app_id = p.app_id
+        AND f.canal  = p.canal
+    GROUP BY f.app_id, f.canal, f.mmp_device_id, substr(CAST(f.first_date AS varchar), 1, 7)
 )
 SELECT
-    mes,
+    cohorte_mes,
     app_id,
     canal,
-    COUNT(DISTINCT mmp_device_id)                                              AS compradores_unicos,
-    COUNT(DISTINCT CASE WHEN num_compras > 1 THEN mmp_device_id END)           AS compradores_repetidores,
-    ROUND(100.0 * COUNT(DISTINCT CASE WHEN num_compras > 1 THEN mmp_device_id END) /
-        NULLIF(COUNT(DISTINCT mmp_device_id), 0), 1)                           AS tasa_repeticion_pct,
-    AVG(revenue_total)                                                         AS ltv_promedio
-FROM compras_device
-GROUP BY mes, app_id, canal
-ORDER BY mes, compradores_unicos DESC
+    COUNT(DISTINCT mmp_device_id)                                     AS compradores,
+    SUM(recompro_30d)                                                 AS recompradores_30d,
+    ROUND(100.0 * SUM(recompro_30d) / NULLIF(COUNT(DISTINCT mmp_device_id), 0), 1)  AS tasa_recompra_30d_pct,
+    AVG(revenue_device)                                               AS ltv_promedio
+FROM device_stats
+GROUP BY cohorte_mes, app_id, canal
+ORDER BY cohorte_mes, compradores DESC
 """
 
 

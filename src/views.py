@@ -17,7 +17,7 @@ from .util import coerce_numeric, integer, money
 LABELS = {
     "revenue_usd": "Revenue (USD)", "installs": "Installs", "devices": "Devices",
     "compradores": "Compradores", "compradores_unicos": "Compradores únicos",
-    "compradores_repetidores": "Repetidores", "tasa_repeticion_pct": "Tasa de repetición (%)",
+    "recompradores_30d": "Recompradores 30d", "tasa_recompra_30d_pct": "Tasa de recompra 30d (%)",
     "ltv_promedio": "LTV promedio", "ltv_por_install": "LTV por install",
     "revenue_30d": "Revenue 30d", "revenue_60d": "Revenue 60d", "revenue_total": "Revenue total",
 }
@@ -51,7 +51,7 @@ def _filter_dates(df: pd.DataFrame, start: date, end: date) -> pd.DataFrame:
 
 
 def _rocket_mask(cfg: ClientConfig, s: pd.Series) -> pd.Series:
-    return s.isin(cfg.rocket_channels)
+    return s.map(cfg.is_rocket)
 
 
 # --------------------------------------------------------------------------- #
@@ -155,34 +155,58 @@ def render_q4(cfg: ClientConfig, start: date, end: date) -> None:
     _source_caption(label, live)
     if df.empty:
         _empty("q4_tasa_repeticion_por_canal_por_mes.sql", "Q4 - Tasa de repeticion"); return
-    df = coerce_numeric(df, ["compradores_unicos", "compradores_repetidores",
-                             "tasa_repeticion_pct", "ltv_promedio"])
+    df = coerce_numeric(df, ["compradores", "recompradores_30d",
+                             "tasa_recompra_30d_pct", "ltv_promedio"])
     df = _filter_dates(df, start, end)
     if df.empty:
         st.warning("Sin datos en el período."); return
+    st.caption("Recompra = 2ª compra dentro de 30 días del primer purchase, mismo device y canal.")
 
-    # Agrega meses: tasa se recalcula desde las sumas; LTV pondera por compradores.
+    # Agrega cohortes por canal: tasa se recalcula desde sumas; LTV pondera por compradores.
     g = df.groupby("canal", as_index=False).agg(
-        compradores_unicos=("compradores_unicos", "sum"),
-        compradores_repetidores=("compradores_repetidores", "sum"),
+        compradores=("compradores", "sum"),
+        recompradores_30d=("recompradores_30d", "sum"),
         ltv_w=("ltv_promedio", lambda s: np.nansum(
-            s.values * df.loc[s.index, "compradores_unicos"].values)))
-    g["tasa_repeticion_pct"] = 100 * g["compradores_repetidores"] / g["compradores_unicos"].replace(0, np.nan)
-    g["ltv_promedio"] = g["ltv_w"] / g["compradores_unicos"].replace(0, np.nan)
+            s.values * df.loc[s.index, "compradores"].values)))
+    g["tasa_recompra_30d_pct"] = 100 * g["recompradores_30d"] / g["compradores"].replace(0, np.nan)
+    g["ltv_promedio"] = g["ltv_w"] / g["compradores"].replace(0, np.nan)
     g["es_rocket"] = _rocket_mask(cfg, g["canal"])
-    g = g[g["compradores_unicos"] > 0].sort_values("tasa_repeticion_pct", ascending=True)
+    g = g[g["compradores"] > 0]
 
-    fig = px.bar(g.tail(15), x="tasa_repeticion_pct", y="canal", orientation="h",
+    # KPI Rocket vs resto (recompra ponderada)
+    def _rate(sub):
+        c, r = sub["compradores"].sum(), sub["recompradores_30d"].sum()
+        return (100 * r / c) if c else np.nan
+    rk = _rate(g[g["es_rocket"]])
+    rest = _rate(g[~g["es_rocket"]])
+    c1, c2 = st.columns(2)
+    c1.markdown(theme.kpi_card("Recompra 30d — Rocket",
+                "—" if np.isnan(rk) else f"{rk:.1f}%"), unsafe_allow_html=True)
+    c2.markdown(theme.kpi_card("Recompra 30d — resto",
+                "—" if np.isnan(rest) else f"{rest:.1f}%"), unsafe_allow_html=True)
+
+    st.markdown("###### Tasa de recompra 30d por canal")
+    gb = g.sort_values("tasa_recompra_30d_pct", ascending=True).tail(15)
+    fig = px.bar(gb, x="tasa_recompra_30d_pct", y="canal", orientation="h",
                  color="es_rocket", color_discrete_map={True: theme.VIOLET, False: theme.GRAY_DK},
-                 labels={"tasa_repeticion_pct": LABELS["tasa_repeticion_pct"], "canal": "", "es_rocket": ""})
-    fig.update_layout(height=460, **PLOT, showlegend=False)
+                 labels={"tasa_recompra_30d_pct": LABELS["tasa_recompra_30d_pct"], "canal": "", "es_rocket": ""})
+    fig.update_layout(height=440, **PLOT, showlegend=False)
     st.plotly_chart(fig, use_container_width=True)
+
+    st.markdown("###### LTV promedio por comprador, por canal")
+    gl = g[g["ltv_promedio"].notna()].sort_values("ltv_promedio", ascending=True).tail(15)
+    figl = px.bar(gl, x="ltv_promedio", y="canal", orientation="h",
+                  color="es_rocket", color_discrete_map={True: theme.VIOLET, False: theme.GRAY_DK},
+                  labels={"ltv_promedio": LABELS["ltv_promedio"], "canal": "", "es_rocket": ""})
+    figl.update_layout(height=440, **PLOT, showlegend=False)
+    st.plotly_chart(figl, use_container_width=True)
+
     st.dataframe(
-        g[["canal", "compradores_unicos", "compradores_repetidores",
-           "tasa_repeticion_pct", "ltv_promedio"]].sort_values("tasa_repeticion_pct", ascending=False),
+        g[["canal", "compradores", "recompradores_30d", "tasa_recompra_30d_pct", "ltv_promedio"]]
+        .sort_values("tasa_recompra_30d_pct", ascending=False),
         use_container_width=True, hide_index=True,
         column_config={
-            "tasa_repeticion_pct": st.column_config.NumberColumn(format="%.1f%%"),
+            "tasa_recompra_30d_pct": st.column_config.NumberColumn(format="%.1f%%"),
             "ltv_promedio": st.column_config.NumberColumn(format="$%.2f")})
 
 
@@ -229,6 +253,34 @@ def render_q5(cfg: ClientConfig, start: date, end: date) -> None:
     fig.update_layout(height=460, **PLOT)
     st.plotly_chart(fig, use_container_width=True)
 
+    # Aporte de Rocket: de cada canal de conversión, qué % vino de un install de Rocket
+    st.markdown("###### Aporte de Rocket a la conversión de cada canal")
+    st.caption("De lo que convierte cada canal, qué parte son usuarios que Rocket instaló.")
+    conv = df.groupby("conversion_canal", as_index=False)[val].sum().rename(columns={val: "total"})
+    assist = (df[_rocket_mask(cfg, df["install_canal"])]
+              .groupby("conversion_canal", as_index=False)[val].sum().rename(columns={val: "rocket"}))
+    mm = conv.merge(assist, how="left", on="conversion_canal").fillna({"rocket": 0})
+    mm["share_rocket_pct"] = 100 * mm["rocket"] / mm["total"].replace(0, np.nan)
+    mm = mm[mm["total"] > 0].nlargest(12, "total").sort_values("share_rocket_pct")
+    figa = px.bar(mm, x="share_rocket_pct", y="conversion_canal", orientation="h",
+                  color_discrete_sequence=[theme.VIOLET],
+                  labels={"share_rocket_pct": "% con install de Rocket", "conversion_canal": ""})
+    figa.update_traces(hovertemplate="%{y}<br>%{x:.1f}% con install de Rocket<extra></extra>")
+    figa.update_layout(height=430, **PLOT)
+    st.plotly_chart(figa, use_container_width=True)
+
+    # Top rutas cruzadas (install ≠ conversión): qué canal capitaliza installs de otros
+    st.markdown("###### Top rutas install → conversión (cruces entre canales)")
+    cross = df[df["install_canal"] != df["conversion_canal"]].copy()
+    if not cross.empty:
+        cross["ruta"] = cross["install_canal"] + "  →  " + cross["conversion_canal"]
+        rr = cross.groupby("ruta", as_index=False)[val].sum().nlargest(12, val).sort_values(val)
+        figr = px.bar(rr, x=val, y="ruta", orientation="h",
+                      color_discrete_sequence=[theme.BLUE],
+                      labels={val: LABELS[val], "ruta": ""})
+        figr.update_layout(height=430, **PLOT)
+        st.plotly_chart(figr, use_container_width=True)
+
 
 # --------------------------------------------------------------------------- #
 # Q6 — LTV por cohorte
@@ -244,28 +296,40 @@ def render_q6(cfg: ClientConfig, start: date, end: date) -> None:
     if df.empty:
         st.warning("Sin datos en el período."); return
 
+    for c in ["revenue_30d", "revenue_60d", "revenue_total"]:
+        df[c] = df[c].fillna(0)
     g = df.groupby("cohorte_mes", as_index=False).agg(
         installs=("installs", "sum"), compradores=("compradores", "sum"),
         revenue_30d=("revenue_30d", "sum"), revenue_60d=("revenue_60d", "sum"),
         revenue_total=("revenue_total", "sum")).sort_values("cohorte_mes")
-    g["ltv_por_install"] = g["revenue_total"] / g["installs"].replace(0, np.nan)
+    inst = g["installs"].replace(0, np.nan)
+    g["conv_pct"] = 100 * g["compradores"] / inst
+    g["ltv_30d"] = g["revenue_30d"] / inst
+    g["ltv_60d"] = g["revenue_60d"] / inst
+    g["ltv_total"] = g["revenue_total"] / inst
 
-    st.markdown("###### LTV por install, por cohorte de instalación")
-    fig = px.line(g, x="cohorte_mes", y="ltv_por_install", markers=True,
-                  color_discrete_sequence=[theme.VIOLET],
-                  labels={"ltv_por_install": LABELS["ltv_por_install"], "cohorte_mes": ""})
-    fig.update_layout(height=340, **PLOT)
-    st.plotly_chart(fig, use_container_width=True)
+    st.caption("Cohorte = mes del install. Ojo: las cohortes recientes tienen la "
+               "ventana de 60d/total incompleta (todavía no maduraron).")
 
-    st.markdown("###### Revenue acumulado por cohorte (30d / 60d / total)")
-    melt = g.melt(id_vars="cohorte_mes", value_vars=["revenue_30d", "revenue_60d", "revenue_total"],
-                  var_name="ventana", value_name="revenue")
-    melt["ventana"] = melt["ventana"].map(LABELS)
-    fig2 = px.bar(melt, x="cohorte_mes", y="revenue", color="ventana", barmode="group",
+    st.markdown("###### Tabla de cohortes")
+    tabla = g[["cohorte_mes", "installs", "compradores", "conv_pct",
+               "ltv_30d", "ltv_60d", "ltv_total", "revenue_total"]]
+    st.dataframe(tabla, use_container_width=True, hide_index=True, column_config={
+        "cohorte_mes": st.column_config.TextColumn("cohorte"),
+        "conv_pct": st.column_config.NumberColumn("conv %", format="%.1f%%"),
+        "ltv_30d": st.column_config.NumberColumn("LTV 30d", format="$%.3f"),
+        "ltv_60d": st.column_config.NumberColumn("LTV 60d", format="$%.3f"),
+        "ltv_total": st.column_config.NumberColumn("LTV total", format="$%.3f"),
+        "revenue_total": st.column_config.NumberColumn("revenue total", format="$%.0f")})
+
+    st.markdown("###### LTV por install a 30d / 60d / total, por cohorte")
+    st.caption("Normalizado por installs → comparable entre cohortes (no depende del tamaño).")
+    melt = g.melt(id_vars="cohorte_mes", value_vars=["ltv_30d", "ltv_60d", "ltv_total"],
+                  var_name="ventana", value_name="ltv")
+    melt["ventana"] = melt["ventana"].map(
+        {"ltv_30d": "LTV 30d", "ltv_60d": "LTV 60d", "ltv_total": "LTV total"})
+    fig2 = px.bar(melt, x="cohorte_mes", y="ltv", color="ventana", barmode="group",
                   color_discrete_sequence=[theme.TEAL, theme.BLUE, theme.VIOLET],
-                  labels={"revenue": "Revenue (USD)", "cohorte_mes": "", "ventana": ""})
-    fig2.update_layout(height=340, **PLOT, legend=dict(orientation="h", y=1.1))
+                  labels={"ltv": "LTV por install (USD)", "cohorte_mes": "cohorte", "ventana": ""})
+    fig2.update_layout(height=380, **PLOT, legend=dict(orientation="h", y=1.1))
     st.plotly_chart(fig2, use_container_width=True)
-    st.dataframe(g, use_container_width=True, hide_index=True, column_config={
-        c: st.column_config.NumberColumn(format="$%.2f")
-        for c in ["revenue_30d", "revenue_60d", "revenue_total", "ltv_por_install"]})

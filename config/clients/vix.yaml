@@ -36,10 +36,12 @@ data_source:
 # Normalización de canales (capa 1 del producto)
 # -----------------------------------------------------------------------------
 # Canales que SON Rocket (para el análisis "Rocket vs. resto").
-# ⚠️ PENDIENTE (bloqueante para que el análisis sea real): completar con TODOS
-# los pids/partners donde corre Rocket. Hoy solo está confirmado 'rocket'.
-rocket_channels:
+# rocket_channel_patterns: cualquier canal cuyo nombre CONTENGA alguno de estos
+# (case-insensitive) cuenta como Rocket. Confirmado por Flor: lychee y rocket.
+rocket_channel_patterns:
+  - "lychee"
   - "rocket"
+rocket_channels: []
 
 # Canales orgánicos / no pagos (línea base; se excluyen del benchmark de pagos).
 organic_channels:
@@ -50,7 +52,7 @@ organic_channels:
 # Mapeo de canal crudo -> grupo legible. Lo no mapeado cae en "Otros".
 channel_groups:
   rocket:              "Rocket"
-  lychee:              "Lychee"
+  lychee:              "Rocket"          # confirmado: lychee es Rocket
   appgradear424:       "AppGradear"
   googleadwords_int:   "Google"
   dv360_int:           "Google"
