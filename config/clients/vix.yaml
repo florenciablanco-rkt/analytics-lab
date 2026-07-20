@@ -1,0 +1,71 @@
+# =============================================================================
+# Analytics Lab — configuración de cliente
+# =============================================================================
+# Cada cliente es un archivo YAML en config/clients/. La app lista todos los
+# archivos de esta carpeta y arma el selector de cliente automáticamente.
+#
+# Para dar de alta un cliente nuevo: copiar este archivo, cambiar los valores
+# y listo. No hace falta tocar código.
+# =============================================================================
+
+# Nombre visible en la UI
+name: "Vix / PrendeTV"
+
+# Apps del cliente (app_id en postbacks_typed).
+# label = cómo se muestra; se puede filtrar por app en la UI.
+apps:
+  - app_id: "id1531467766"
+    label: "iOS"
+    platform: "ios"
+  - app_id: "com.univision.prendetv"
+    label: "Android"
+    platform: "android"
+
+# Evento de compra / revenue de este cliente (taxonomía propia del MMP).
+# Es lo que cambia entre clientes; el resto de la query es genérico.
+purchase_event: "cdp_add_on_purchase"
+
+# Evento de install (suele ser 'install' en AppsFlyer, homogéneo entre clientes)
+install_event: "install"
+
+# -----------------------------------------------------------------------------
+# Normalización de canales (capa 1 del producto)
+# -----------------------------------------------------------------------------
+# La query devuelve el canal crudo = COALESCE(partner, pid). Acá lo agrupamos
+# en canales legibles para el negocio.
+
+# Canales que SON Rocket (para el análisis "Rocket vs. resto").
+# ⚠️ PENDIENTE (bloqueante para que el análisis sea real): completar con el
+# mapeo de TODOS los pids/partners donde corre Rocket. Hoy solo está confirmado
+# 'rocket'. No agregar canales acá sin confirmar que son supply de Rocket, o el
+# benchmark "Rocket vs resto" queda mal.
+rocket_channels:
+  - "rocket"
+
+# Canales orgánicos / no pagos (línea base de demanda, se excluyen del
+# benchmark de canales pagos).
+organic_channels:
+  - "organic"
+  - "product_vix"
+  - "crm_vix_svod_eml"
+
+# Mapeo de canal crudo -> grupo legible. Lo no mapeado cae en "Otros".
+# Sirve para la vista "Por grupo" y para comparar Rocket contra Google/Meta/etc.
+channel_groups:
+  rocket:              "Rocket"
+  # lychee / appgradear424: ¿son supply de Rocket? Confirmar antes de agrupar.
+  lychee:              "Lychee"
+  appgradear424:       "AppGradear"
+  googleadwords_int:   "Google"
+  dv360_int:           "Google"
+  "Apple Search Ads":  "Apple Search Ads"
+  tiktokglobal_int:    "TikTok"
+  Facebook_Paid:       "Meta"
+  Social_facebook:     "Meta"
+  Social_instagram:    "Meta"
+  Twitter_Paid:        "X (Twitter)"
+  entravision:         "Entravision"
+  bcnagency:           "BCN Agency"
+  miqdigitaluk:        "MiQ"
+  organic:             "Orgánico"
+  product_vix:         "Orgánico"
