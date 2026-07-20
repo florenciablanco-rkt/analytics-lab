@@ -136,17 +136,52 @@ def render_q3(cfg: ClientConfig, start: date, end: date) -> None:
 
     metric = st.selectbox("Métrica", ["revenue_usd", "installs", "compradores"],
                           format_func=lambda m: LABELS[m], key="q3m")
-    top = df.groupby("canal")[metric].sum().nlargest(8).index.tolist()
-    df["canal_top"] = np.where(df["canal"].isin(top), df["canal"], "Otros")
-    ev = df.groupby(["semana", "canal_top"], as_index=False)[metric].sum()
-    fig = px.area(ev, x="semana", y=metric, color="canal_top",
-                  color_discrete_sequence=theme.CHANNEL_PALETTE,
-                  labels={metric: LABELS[metric], "semana": "", "canal_top": ""})
     yfmt = "$%{y:,.2f}" if metric == "revenue_usd" else "%{y:,.0f}"
+
+    df["segmento"] = np.where(df["canal"].map(cfg.is_rocket), "Rocket Lab",
+                     np.where(df["canal"].map(cfg.is_organic), "Orgánico", "Resto pagos"))
+    seg_colors = {"Rocket Lab": theme.VIOLET, "Resto pagos": theme.BLUE, "Orgánico": theme.GRAY_DK}
+
+    st.markdown("###### Rocket Lab vs. resto pagos vs. orgánico en el tiempo")
+    ev = df.groupby(["semana", "segmento"], as_index=False)[metric].sum()
+    fig = px.line(ev, x="semana", y=metric, color="segmento", markers=True,
+                  color_discrete_map=seg_colors,
+                  labels={metric: LABELS[metric], "semana": "", "segmento": ""})
     fig.update_traces(hovertemplate="<b>%{fullData.name}</b><br>%{x|%d-%b-%Y}<br>"
                       + LABELS[metric] + ": " + yfmt + "<extra></extra>")
-    fig.update_layout(height=430, **PLOT, legend=dict(orientation="h", y=-0.2))
+    fig.update_layout(height=360, **PLOT, legend=dict(orientation="h", y=-0.2))
     st.plotly_chart(fig, use_container_width=True)
+
+    st.markdown("###### Share de Rocket Lab (sobre canales pagos)")
+    st.caption("Qué porcentaje del total pago (sin orgánico) se lleva Rocket Lab cada semana.")
+    paid = df[~df["canal"].map(cfg.is_organic)]
+    wk = paid.groupby("semana", as_index=False)[metric].sum().rename(columns={metric: "tot"})
+    rk = (paid[paid["canal"].map(cfg.is_rocket)].groupby("semana", as_index=False)[metric]
+          .sum().rename(columns={metric: "rk"}))
+    sh = wk.merge(rk, how="left", on="semana").fillna({"rk": 0})
+    sh["share"] = 100 * sh["rk"] / sh["tot"].replace(0, np.nan)
+    figs = px.area(sh, x="semana", y="share", color_discrete_sequence=[theme.VIOLET],
+                   labels={"share": "% que es Rocket Lab", "semana": ""})
+    figs.update_traces(hovertemplate="%{x|%d-%b-%Y}<br>%{y:.1f}% Rocket Lab<extra></extra>")
+    figs.update_layout(height=280, **PLOT, yaxis_range=[0, 100])
+    st.plotly_chart(figs, use_container_width=True)
+
+    # Mayores movimientos: última semana vs anterior (preview de la capa "Detectar")
+    semanas = sorted(df["semana"].dropna().unique())
+    if len(semanas) >= 2:
+        last, prev = semanas[-1], semanas[-2]
+        piv = df.groupby(["canal", "semana"])[metric].sum().unstack(fill_value=0)
+        if last in piv.columns and prev in piv.columns:
+            mov = pd.DataFrame({"canal": piv.index,
+                                "anterior": piv[prev].values, "ultima": piv[last].values})
+            mov["cambio"] = mov["ultima"] - mov["anterior"]
+            mov["cambio_pct"] = 100 * mov["cambio"] / mov["anterior"].replace(0, np.nan)
+            mov = mov[(mov["ultima"] > 0) | (mov["anterior"] > 0)]
+            mov = mov.iloc[mov["cambio"].abs().argsort()[::-1]].head(10)
+            st.markdown(f"###### Mayores movimientos — {pd.Timestamp(last):%d-%b} vs {pd.Timestamp(prev):%d-%b}")
+            st.dataframe(mov[["canal", "anterior", "ultima", "cambio", "cambio_pct"]],
+                         use_container_width=True, hide_index=True, column_config={
+                             "cambio_pct": st.column_config.NumberColumn("cambio %", format="%+.0f%%")})
 
 
 # --------------------------------------------------------------------------- #
@@ -323,8 +358,12 @@ def render_q6(cfg: ClientConfig, start: date, end: date) -> None:
     g["ltv_60d"] = g["revenue_60d"] / inst
     g["ltv_total"] = g["revenue_total"] / inst
 
-    st.caption("Cohorte = mes del install. Ojo: las cohortes recientes tienen la "
-               "ventana de 60d/total incompleta (todavía no maduraron).")
+    st.info("**Qué es una cohorte:** cada fila agrupa a los usuarios por el **mes en que "
+            "instalaron**. A ese grupo lo seguimos en el tiempo para ver cuánto revenue "
+            "generó a los 30 días, a los 60 días y en total. Sirve para comparar si los "
+            "usuarios que entran en un mes valen más o menos que los de otro, y cuánto "
+            "tardan en comprar. Las cohortes más recientes todavía no maduraron (su "
+            "ventana de 60d/total está incompleta).")
 
     st.markdown("###### Tabla de cohortes")
     tabla = g[["cohorte_mes", "installs", "compradores", "conv_pct",
@@ -337,14 +376,19 @@ def render_q6(cfg: ClientConfig, start: date, end: date) -> None:
         "ltv_total": st.column_config.NumberColumn("LTV total", format="$%.3f"),
         "revenue_total": st.column_config.NumberColumn("revenue total", format="$%.0f")})
 
-    st.markdown("###### LTV por install a 30d / 60d / total, por cohorte")
-    st.caption("Normalizado por installs → comparable entre cohortes (no depende del tamaño).")
-    melt = g.melt(id_vars="cohorte_mes", value_vars=["ltv_30d", "ltv_60d", "ltv_total"],
-                  var_name="ventana", value_name="ltv")
-    melt["ventana"] = melt["ventana"].map(
-        {"ltv_30d": "LTV 30d", "ltv_60d": "LTV 60d", "ltv_total": "LTV total"})
-    fig2 = px.bar(melt, x="cohorte_mes", y="ltv", color="ventana", barmode="group",
-                  color_discrete_sequence=[theme.TEAL, theme.BLUE, theme.VIOLET],
-                  labels={"ltv": "LTV por install (USD)", "cohorte_mes": "cohorte", "ventana": ""})
-    fig2.update_layout(height=380, **PLOT, legend=dict(orientation="h", y=1.1))
-    st.plotly_chart(fig2, use_container_width=True)
+    st.markdown("###### Curva de maduración de LTV por cohorte")
+    st.caption("Cada línea es una cohorte. Muestra cuánto revenue por install acumuló a los "
+               "30 días, 60 días y en total — sube de izquierda a derecha a medida que los "
+               "usuarios siguen comprando. Cuanto más arriba la línea, más valiosa la cohorte.")
+    curve = g.melt(id_vars="cohorte_mes", value_vars=["ltv_30d", "ltv_60d", "ltv_total"],
+                   var_name="ventana", value_name="ltv")
+    curve["ventana"] = curve["ventana"].map(
+        {"ltv_30d": "30 días", "ltv_60d": "60 días", "ltv_total": "total"})
+    figc = px.line(curve, x="ventana", y="ltv", color="cohorte_mes", markers=True,
+                   category_orders={"ventana": ["30 días", "60 días", "total"]},
+                   color_discrete_sequence=theme.CHANNEL_PALETTE,
+                   labels={"ltv": "LTV por install (USD)", "ventana": "", "cohorte_mes": "cohorte"})
+    figc.update_traces(hovertemplate="<b>cohorte %{fullData.name}</b><br>%{x}<br>"
+                       "LTV/install: $%{y:.4f}<extra></extra>")
+    figc.update_layout(height=380, **PLOT, legend=dict(orientation="h", y=-0.2))
+    st.plotly_chart(figc, use_container_width=True)
