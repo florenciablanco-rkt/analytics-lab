@@ -53,7 +53,8 @@ levanta automáticamente en el selector de cliente. No hace falta tocar código.
 app.py                     # dashboard Streamlit
 config/clients/*.yaml      # config por cliente (eventos, apps, mapeo de canales)
 src/config.py              # loader de config
-src/queries.py             # queries Athena parametrizadas (Q1; sumar Q2..Q6)
+src/queries.py             # queries Athena parametrizadas (Q1..Q6, builders)
+queries/*.sql              # SQL original de Q1..Q6 (copy-paste directo en Athena)
 src/athena.py              # conexión PyAthena
 src/metrics.py             # normalización + Rocket vs resto
 src/theme.py               # brandbook Rocket Lab
@@ -65,6 +66,6 @@ data/sample_vix.csv        # muestra para modo CSV
 - **Mapeo de canales de Rocket**: hoy `rocket_channels` solo confirma `rocket`.
   Completar en `vix.yaml` con todos los pids/partners donde corre Rocket
   (bloqueante para que el benchmark sea fiel).
-- Portar Q2–Q6 (mix UA/RTG, LTV por cohorte, journey, repetición) desde el
-  artifact "queries v1".
+- Sumar al dashboard las vistas de Q2–Q6 (ya portadas a `src/queries.py`):
+  mix UA/RTG, evolución, repetición, journey y LTV por cohorte.
 - Capas 3 y 4 del producto (Detectar / Recomendar).
