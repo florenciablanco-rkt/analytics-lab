@@ -95,6 +95,25 @@ def render_q2(cfg: ClientConfig, start: date, end: date) -> None:
     fig.update_layout(height=460, **PLOT, legend=dict(orientation="h", y=1.08))
     st.plotly_chart(fig, use_container_width=True)
 
+    # Evolución temporal por media, filtrando UA o RTG (excluyente)
+    st.markdown("###### Evolución temporal por media")
+    ca, cb = st.columns([1, 3])
+    tipo_sel = ca.radio("Tipo (excluyente)", ["UA", "RTG"], key="q2tipo")
+    sub = df[df["tipo"] == tipo_sel].copy()
+    canales = sub.groupby("canal")[metric].sum().sort_values(ascending=False).index.tolist()
+    sel = cb.multiselect("Medias a mostrar (por default todas)", canales, default=canales,
+                         key="q2canales")
+    sub = sub[sub["canal"].isin(sel)]
+    if sub.empty:
+        st.warning("No hay data para ese tipo / esas medias."); return
+    sub["fecha"] = pd.to_datetime(sub["dt"].astype(str).str[:10], errors="coerce")
+    ev = sub.groupby(["fecha", "canal"], as_index=False)[metric].sum()
+    figt = px.line(ev, x="fecha", y=metric, color="canal", markers=True,
+                   color_discrete_sequence=theme.CHANNEL_PALETTE * 5,
+                   labels={metric: LABELS[metric], "fecha": "", "canal": ""})
+    figt.update_layout(height=440, **PLOT, legend=dict(orientation="h", y=-0.25))
+    st.plotly_chart(figt, use_container_width=True)
+
 
 # --------------------------------------------------------------------------- #
 # Q3 — Evolución semanal
