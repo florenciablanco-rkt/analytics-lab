@@ -111,6 +111,9 @@ def render_q2(cfg: ClientConfig, start: date, end: date) -> None:
     figt = px.line(ev, x="fecha", y=metric, color="canal", markers=True,
                    color_discrete_sequence=theme.CHANNEL_PALETTE * 5,
                    labels={metric: LABELS[metric], "fecha": "", "canal": ""})
+    yfmt = "$%{y:,.2f}" if metric == "revenue_usd" else "%{y:,.0f}"
+    figt.update_traces(hovertemplate="<b>%{fullData.name}</b><br>%{x|%d-%b-%Y}<br>"
+                       + LABELS[metric] + ": " + yfmt + "<extra></extra>")
     figt.update_layout(height=440, **PLOT, legend=dict(orientation="h", y=-0.25))
     st.plotly_chart(figt, use_container_width=True)
 
@@ -137,6 +140,9 @@ def render_q3(cfg: ClientConfig, start: date, end: date) -> None:
     fig = px.area(ev, x="semana", y=metric, color="canal_top",
                   color_discrete_sequence=theme.CHANNEL_PALETTE,
                   labels={metric: LABELS[metric], "semana": "", "canal_top": ""})
+    yfmt = "$%{y:,.2f}" if metric == "revenue_usd" else "%{y:,.0f}"
+    fig.update_traces(hovertemplate="<b>%{fullData.name}</b><br>%{x|%d-%b-%Y}<br>"
+                      + LABELS[metric] + ": " + yfmt + "<extra></extra>")
     fig.update_layout(height=430, **PLOT, legend=dict(orientation="h", y=-0.2))
     st.plotly_chart(fig, use_container_width=True)
 
