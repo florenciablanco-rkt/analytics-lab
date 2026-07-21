@@ -281,16 +281,23 @@ def render_q5(cfg: ClientConfig, start: date, end: date) -> None:
                 "<span style='color:#696A6B'>usuarios que Rocket Lab generó y otro cerró</span>"),
                 unsafe_allow_html=True)
 
-    st.markdown("###### Matriz install → conversión (top canales)")
-    top_i = df.groupby("install_canal")[val].sum().nlargest(8).index
-    top_c = df.groupby("conversion_canal")[val].sum().nlargest(8).index
-    m = df[df["install_canal"].isin(top_i) & df["conversion_canal"].isin(top_c)]
-    piv = m.pivot_table(index="install_canal", columns="conversion_canal",
-                        values=val, aggfunc="sum", fill_value=0)
+    st.markdown("###### Matriz install → conversión")
+    st.caption("Top 12 canales por actividad combinada (instaló + convirtió), mismo set en "
+               "ambos ejes — así aparecen canales fuertes en conversión aunque instalen poco "
+               "(ej. Google) y viceversa. Diagonal = mismo canal; fuera de la diagonal = cruces.")
+    # Set único por importancia combinada, para que cada canal figure en ambos ejes.
+    imp = (df.groupby("install_canal")[val].sum()
+             .add(df.groupby("conversion_canal")[val].sum(), fill_value=0)
+             .sort_values(ascending=False))
+    top = imp.head(12).index.tolist()
+    m = df[df["install_canal"].isin(top) & df["conversion_canal"].isin(top)]
+    piv = (m.pivot_table(index="install_canal", columns="conversion_canal",
+                         values=val, aggfunc="sum", fill_value=0)
+             .reindex(index=top, columns=top, fill_value=0))
     fig = px.imshow(piv, text_auto=".0f", aspect="auto",
                     color_continuous_scale=["#F5F5F7", theme.VIOLET],
                     labels=dict(x="convirtió", y="instaló", color=LABELS[val]))
-    fig.update_layout(height=460, **PLOT)
+    fig.update_layout(height=520, **PLOT)
     st.plotly_chart(fig, use_container_width=True)
 
     # Aporte de Rocket: de cada canal de conversión, qué % vino de un install de Rocket
