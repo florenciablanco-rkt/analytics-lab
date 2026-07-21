@@ -28,7 +28,7 @@ QUERY_SPECS = {
     "q3": (queries.q3_weekly_evolution,  {"semana", "canal", "installs", "revenue_usd"}),
     "q4": (queries.q4_repeat_rate,       {"canal", "compradores", "tasa_recompra_30d_pct"}),
     "q5": (queries.q5_journey,           {"install_canal", "conversion_canal", "compradores"}),
-    "q6": (queries.q6_ltv_cohorte,       {"cohorte_mes", "installs", "ltv_por_install"}),
+    "q6": (queries.q6_ltv_cohorte,       {"cohorte_mes", "mes_compra", "installs_cohorte", "revenue"}),
 }
 
 

@@ -332,70 +332,68 @@ def render_q5(cfg: ClientConfig, start: date, end: date) -> None:
 # --------------------------------------------------------------------------- #
 # Q6 — LTV por cohorte
 # --------------------------------------------------------------------------- #
+def _mes_idx(s: pd.Series) -> pd.Series:
+    """'YYYY-MM' -> índice entero de mes (año*12+mes) para restar meses."""
+    p = s.astype(str).str.split("-", expand=True)
+    return p[0].astype(int) * 12 + p[1].astype(int)
+
+
 def render_q6(cfg: ClientConfig, start: date, end: date) -> None:
     df, label, live = datasource.get_query(cfg, "q6", start, end)
     _source_caption(label, live)
     if df.empty:
         _empty("q6_ltv_por_cohorte_de_instalacion.sql", "Q6 - LTV cohorte"); return
-    df = coerce_numeric(df, ["installs", "compradores", "revenue_30d", "revenue_60d",
-                             "revenue_total", "ltv_por_install"])
-    df = _filter_dates(df, start, end)
+    df = coerce_numeric(df, ["installs_cohorte", "compradores", "revenue"])
+    df["canal"] = df["canal"].map(cfg.display_channel)
+    df = _filter_dates(df, start, end)   # filtra por cohorte_mes (mes del install)
     if df.empty:
         st.warning("Sin datos en el período."); return
 
-    if "canal" in df.columns:
-        seg = st.radio("Segmento", ["Todos", "Rocket", "Resto (no-Rocket)"],
-                       horizontal=True, key="q6seg")
-        if seg == "Rocket":
-            df = df[df["canal"].map(cfg.is_rocket)]
-        elif seg.startswith("Resto"):
-            df = df[~df["canal"].map(cfg.is_rocket)]
-        if df.empty:
-            st.warning("Sin datos para ese segmento."); return
+    seg = st.radio("Segmento", ["Todos", "Rocket Lab", "Resto (no-Rocket)"],
+                   horizontal=True, key="q6seg")
+    if seg == "Rocket Lab":
+        df = df[df["canal"].map(cfg.is_rocket)]
+    elif seg.startswith("Resto"):
+        df = df[~df["canal"].map(cfg.is_rocket)]
+    if df.empty:
+        st.warning("Sin datos para ese segmento."); return
 
-    for c in ["revenue_30d", "revenue_60d", "revenue_total"]:
-        df[c] = df[c].fillna(0)
-    g = df.groupby("cohorte_mes", as_index=False).agg(
-        installs=("installs", "sum"), compradores=("compradores", "sum"),
-        revenue_30d=("revenue_30d", "sum"), revenue_60d=("revenue_60d", "sum"),
-        revenue_total=("revenue_total", "sum")).sort_values("cohorte_mes")
-    inst = g["installs"].replace(0, np.nan)
-    g["conv_pct"] = 100 * g["compradores"] / inst
-    g["ltv_30d"] = g["revenue_30d"] / inst
-    g["ltv_60d"] = g["revenue_60d"] / inst
-    g["ltv_total"] = g["revenue_total"] / inst
+    st.info("**Cómo leer esto:** cada cohorte son los **devices que instalaron en un mismo "
+            "mes**. Seguimos a *esos mismos devices* y vemos cuánto revenue generaron en el "
+            "mes del install (**mes 0**), al mes siguiente (**mes 1**), al subsiguiente… — "
+            "incluye las **recompras** de los meses posteriores. El valor es **LTV por "
+            "install acumulado** (revenue acumulado ÷ installs de la cohorte).")
 
-    st.info("**Qué es una cohorte:** cada fila agrupa a los usuarios por el **mes en que "
-            "instalaron**. A ese grupo lo seguimos en el tiempo para ver cuánto revenue "
-            "generó a los 30 días, a los 60 días y en total. Sirve para comparar si los "
-            "usuarios que entran en un mes valen más o menos que los de otro, y cuánto "
-            "tardan en comprar. Las cohortes más recientes todavía no maduraron (su "
-            "ventana de 60d/total está incompleta).")
+    # meses desde el install
+    df["ms"] = _mes_idx(df["mes_compra"]) - _mes_idx(df["cohorte_mes"])
+    df = df[df["ms"] >= 0]
+    # tamaño de cohorte = installs únicos (una vez por cohorte+canal, luego se suma)
+    size = (df.drop_duplicates(["cohorte_mes", "canal"])
+              .groupby("cohorte_mes")["installs_cohorte"].sum())
+    # revenue por (cohorte, mes-desde-install) -> acumulado -> LTV por install
+    rev = df.groupby(["cohorte_mes", "ms"], as_index=False)["revenue"].sum().sort_values(["cohorte_mes", "ms"])
+    rev["rev_cum"] = rev.groupby("cohorte_mes")["revenue"].cumsum()
+    rev["ltv_cum"] = rev["rev_cum"] / rev["cohorte_mes"].map(size)
 
-    st.markdown("###### Tabla de cohortes")
-    tabla = g[["cohorte_mes", "installs", "compradores", "conv_pct",
-               "ltv_30d", "ltv_60d", "ltv_total", "revenue_total"]]
-    st.dataframe(tabla, use_container_width=True, hide_index=True, column_config={
-        "cohorte_mes": st.column_config.TextColumn("cohorte"),
-        "conv_pct": st.column_config.NumberColumn("conv %", format="%.1f%%"),
-        "ltv_30d": st.column_config.NumberColumn("LTV 30d", format="$%.3f"),
-        "ltv_60d": st.column_config.NumberColumn("LTV 60d", format="$%.3f"),
-        "ltv_total": st.column_config.NumberColumn("LTV total", format="$%.3f"),
-        "revenue_total": st.column_config.NumberColumn("revenue total", format="$%.0f")})
+    st.markdown("###### LTV por install acumulado — cohorte × meses desde el install")
+    piv = rev.pivot(index="cohorte_mes", columns="ms", values="ltv_cum")
+    piv.columns = [f"mes {c}" for c in piv.columns]
+    piv = piv.reset_index().rename(columns={"cohorte_mes": "cohorte (install)"})
+    st.dataframe(piv, use_container_width=True, hide_index=True, column_config={
+        c: st.column_config.NumberColumn(c, format="$%.4f") for c in piv.columns if c.startswith("mes")})
+    sz = size.reset_index().rename(columns={"cohorte_mes": "cohorte", "installs_cohorte": "installs"})
+    st.caption("Installs por cohorte — " +
+               " · ".join(f"{r.cohorte}: {int(r.installs):,}" for r in sz.itertuples()))
 
-    st.markdown("###### Curva de maduración de LTV por cohorte")
-    st.caption("Cada línea es una cohorte. Muestra cuánto revenue por install acumuló a los "
-               "30 días, 60 días y en total — sube de izquierda a derecha a medida que los "
-               "usuarios siguen comprando. Cuanto más arriba la línea, más valiosa la cohorte.")
-    curve = g.melt(id_vars="cohorte_mes", value_vars=["ltv_30d", "ltv_60d", "ltv_total"],
-                   var_name="ventana", value_name="ltv")
-    curve["ventana"] = curve["ventana"].map(
-        {"ltv_30d": "30 días", "ltv_60d": "60 días", "ltv_total": "total"})
-    figc = px.line(curve, x="ventana", y="ltv", color="cohorte_mes", markers=True,
-                   category_orders={"ventana": ["30 días", "60 días", "total"]},
+    st.markdown("###### Curva de maduración (LTV acumulado por install)")
+    st.caption("Cada línea es una cohorte. Sube a medida que esos devices siguen comprando en "
+               "los meses siguientes. Cuanto más empinada, más recompra hay.")
+    figc = px.line(rev, x="ms", y="ltv_cum", color="cohorte_mes", markers=True,
                    color_discrete_sequence=theme.CHANNEL_PALETTE,
-                   labels={"ltv": "LTV por install (USD)", "ventana": "", "cohorte_mes": "cohorte"})
-    figc.update_traces(hovertemplate="<b>cohorte %{fullData.name}</b><br>%{x}<br>"
-                       "LTV/install: $%{y:.4f}<extra></extra>")
-    figc.update_layout(height=380, **PLOT, legend=dict(orientation="h", y=-0.2))
+                   labels={"ltv_cum": "LTV por install acum. (USD)", "ms": "meses desde el install",
+                           "cohorte_mes": "cohorte"})
+    figc.update_traces(hovertemplate="<b>cohorte %{fullData.name}</b><br>mes %{x} desde install<br>"
+                       "LTV/install acum.: $%{y:.4f}<extra></extra>")
+    figc.update_layout(height=380, **PLOT, legend=dict(orientation="h", y=-0.2),
+                       xaxis=dict(dtick=1))
     st.plotly_chart(figc, use_container_width=True)

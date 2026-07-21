@@ -213,52 +213,58 @@ ORDER BY c.dt, compradores DESC
 # --------------------------------------------------------------------------- #
 def q6_ltv_cohorte(cfg: ClientConfig, start: date, end: date,
                    app_ids: list[str] | None = None) -> str:
-    """Revenue acumulado a 30/60 días y total desde el install, por mes de
-    cohorte. Sugerido: ventana de installs de ~180 días para 3 cohortes
-    mensuales completas. Purchases sin filtro de fecha para no cortar el LTV."""
+    """Cohorte de LTV: de los devices que instalaron en el mes X, cuánto revenue
+    generaron ellos mismos en cada mes de compra posterior (mes_compra). Permite
+    ver la maduración mes a mes, incluyendo recompras de meses siguientes.
+    Una fila por (cohorte de install, canal de install, mes de compra).
+    installs_cohorte = tamaño de la cohorte (constante por cohorte/canal)."""
     apps = app_ids or cfg.app_ids
     buy, inst = cfg.purchase_event, cfg.install_event
     return f"""WITH installs AS (
-    SELECT
-        app_id,
-        COALESCE(partner, pid)                          AS canal,
-        mmp_device_id,
-        MIN(date_parse(substr(dt, 1, 10), '%Y-%m-%d'))  AS install_date,
-        substr(MIN(dt), 1, 7)                           AS cohorte_mes
-    FROM prod_tracking.postbacks_typed
-    WHERE app_id IN ({_in_list(apps)})
-        AND event_name = '{inst}'
+    SELECT app_id, mmp_device_id, canal, cohorte_mes FROM (
+        SELECT
+            app_id,
+            mmp_device_id,
+            COALESCE(partner, pid)   AS canal,
+            substr(dt, 1, 7)         AS cohorte_mes,
+            ROW_NUMBER() OVER (PARTITION BY app_id, mmp_device_id ORDER BY dt) AS rn
+        FROM prod_tracking.postbacks_typed
+        WHERE app_id IN ({_in_list(apps)})
+            AND event_name = '{inst}'
 {_date_filter(start, end)}
-    GROUP BY app_id, COALESCE(partner, pid), mmp_device_id
+    )
+    WHERE rn = 1
+),
+cohort_size AS (
+    SELECT cohorte_mes, canal, COUNT(DISTINCT mmp_device_id) AS installs_cohorte
+    FROM installs
+    GROUP BY cohorte_mes, canal
 ),
 purchases AS (
-    SELECT
-        app_id,
-        mmp_device_id,
-        date_parse(substr(dt, 1, 10), '%Y-%m-%d')  AS purchase_date,
-        event_revenue_usd
+    SELECT app_id, mmp_device_id, substr(dt, 1, 7) AS mes_compra, event_revenue_usd
     FROM prod_tracking.postbacks_typed
     WHERE app_id IN ({_in_list(apps)})
         AND event_name = '{buy}'
+{_date_filter(start, end)}
 )
 SELECT
     i.cohorte_mes,
     i.app_id,
     i.canal,
-    COUNT(DISTINCT i.mmp_device_id)                                                   AS installs,
-    COUNT(DISTINCT CASE WHEN p.purchase_date IS NOT NULL THEN i.mmp_device_id END)    AS compradores,
-    SUM(CASE WHEN date_diff('day', i.install_date, p.purchase_date) <= 30
-             THEN p.event_revenue_usd END)                                            AS revenue_30d,
-    SUM(CASE WHEN date_diff('day', i.install_date, p.purchase_date) <= 60
-             THEN p.event_revenue_usd END)                                            AS revenue_60d,
-    SUM(p.event_revenue_usd)                                                          AS revenue_total,
-    SUM(p.event_revenue_usd) / NULLIF(COUNT(DISTINCT i.mmp_device_id), 0)             AS ltv_por_install
+    p.mes_compra,
+    cs.installs_cohorte,
+    COUNT(DISTINCT p.mmp_device_id)  AS compradores,
+    SUM(p.event_revenue_usd)         AS revenue
 FROM installs i
-LEFT JOIN purchases p
+JOIN purchases p
     ON  i.mmp_device_id = p.mmp_device_id
     AND i.app_id        = p.app_id
-GROUP BY i.cohorte_mes, i.app_id, i.canal
-ORDER BY i.cohorte_mes, installs DESC
+JOIN cohort_size cs
+    ON  cs.cohorte_mes = i.cohorte_mes
+    AND cs.canal       = i.canal
+WHERE p.mes_compra >= i.cohorte_mes
+GROUP BY i.cohorte_mes, i.app_id, i.canal, p.mes_compra, cs.installs_cohorte
+ORDER BY i.cohorte_mes, p.mes_compra
 """
 
 
