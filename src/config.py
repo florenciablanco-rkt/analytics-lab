@@ -29,6 +29,7 @@ class ClientConfig:
     organic_channels: list[str] = field(default_factory=list)
     channel_groups: dict[str, str] = field(default_factory=dict)
     data_source: dict = field(default_factory=dict)
+    subscription: dict = field(default_factory=dict)
 
     @property
     def app_ids(self) -> list[str]:
@@ -43,6 +44,18 @@ class ClientConfig:
     def group_of(self, canal: str) -> str:
         """Grupo legible de un canal crudo. Lo no mapeado cae en 'Otros'."""
         return self.channel_groups.get(canal, "Otros")
+
+    def sub_price_usd(self, country: str, plan: str) -> float | None:
+        """Precio de suscripción en USD para (país, plan). plan: 'monthly'|'annual'.
+        Convierte desde moneda local con fx_to_usd. Sin precio -> None."""
+        sub = self.subscription
+        if not sub:
+            return None
+        entry = sub.get("prices", {}).get(country) or sub.get("default")
+        if not entry or entry.get(plan) is None:
+            return None
+        fx = sub.get("fx_to_usd", {}).get(entry.get("currency", "USD"), 1.0)
+        return float(entry[plan]) * float(fx)
 
     def is_rocket(self, canal: str) -> bool:
         c = str(canal).lower()
@@ -74,6 +87,7 @@ def load_client(slug: str) -> ClientConfig:
         organic_channels=data.get("organic_channels", []),
         channel_groups=data.get("channel_groups", {}),
         data_source=data.get("data_source", {}),
+        subscription=data.get("subscription", {}),
     )
 
 

@@ -5,7 +5,7 @@
 # copiar este archivo y ajustar los valores. No hace falta tocar código.
 # =============================================================================
 
-name: "Vix"
+name: "ViX"
 
 # App del cliente (app_id en postbacks_typed). Vix = iOS.
 apps:
@@ -16,6 +16,47 @@ apps:
 # Evento de compra / revenue de este cliente (taxonomía propia del MMP).
 purchase_event: "cdp_add_on_purchase"
 install_event: "install"
+
+# -----------------------------------------------------------------------------
+# Suscripción (ViX Premium) — el negocio real
+# -----------------------------------------------------------------------------
+# El MMP NO trae revenue de suscripción, así que le asignamos un precio.
+# Guardamos el precio en MONEDA LOCAL + un tipo de cambio editable → la app
+# calcula el revenue estimado en USD. Fuente de precios: ayuda.vix.com.
+subscription:
+  monthly_event: "cdp_subscribe_monthly"
+  annual_event: "cdp_subscribe_annual"
+
+  # ⚠️ FX a verificar (impacta fuerte: MX es ~76% de los suscriptores).
+  # Valor = cuántos USD vale 1 unidad de la moneda.
+  fx_to_usd:
+    USD: 1.0
+    MXN: 0.054        # ≈ 18.5 MXN/USD  ← CONFIRMAR con el FX real
+
+  # Precio por país en moneda local (monthly / annual).
+  # Países sin entrada usan `default` (referencia USD de app stores).
+  default: {currency: "USD", monthly: 5.99, annual: 49.99}
+  prices:
+    US: {currency: "USD", monthly: 6.99, annual: 84.99}   # plan base Con Anuncios
+    PR: {currency: "USD", monthly: 6.99, annual: 84.99}
+    MX: {currency: "MXN", monthly: 149.0, annual: 1499.0}
+    CO: {currency: "USD", monthly: 5.99, annual: 49.99}   # ~$22.900 COP ≈ $5.99
+    AR: {currency: "USD", monthly: 5.99, annual: 49.99}   # ARS muy volátil → ref USD
+    # Resto LATAM (cobro en USD vía app stores):
+    CL: {currency: "USD", monthly: 5.99, annual: 49.99}
+    PE: {currency: "USD", monthly: 5.99, annual: 49.99}
+    EC: {currency: "USD", monthly: 5.99, annual: 49.99}
+    GT: {currency: "USD", monthly: 5.99, annual: 49.99}
+    CR: {currency: "USD", monthly: 5.99, annual: 49.99}
+    SV: {currency: "USD", monthly: 5.99, annual: 49.99}
+    HN: {currency: "USD", monthly: 5.99, annual: 49.99}
+    BO: {currency: "USD", monthly: 5.99, annual: 49.99}
+    PA: {currency: "USD", monthly: 5.99, annual: 49.99}
+    DO: {currency: "USD", monthly: 5.99, annual: 49.99}
+    NI: {currency: "USD", monthly: 5.99, annual: 49.99}
+    PY: {currency: "USD", monthly: 5.99, annual: 49.99}
+    UY: {currency: "USD", monthly: 5.99, annual: 49.99}
+    VE: {currency: "USD", monthly: 5.99, annual: 49.99}
 
 # -----------------------------------------------------------------------------
 # Fuente de datos
