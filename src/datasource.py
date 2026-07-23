@@ -23,6 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # Por query: builder de Athena + columnas mínimas esperadas (para validar que
 # lo que se leyó del sheet/snapshot es realmente esa query).
 QUERY_SPECS = {
+    "funnel": (queries.q_funnel, {"semana", "country", "canal", "installs", "sub_monthly", "sub_annual"}),
     "q1": (queries.q1_weekly_by_channel, {"semana", "canal", "installs", "revenue_usd"}),
     "q2": (queries.q2_mix_ua_rtg,        {"canal", "is_retargeting", "revenue_usd"}),
     "q3": (queries.q3_weekly_evolution,  {"semana", "canal", "installs", "revenue_usd"}),

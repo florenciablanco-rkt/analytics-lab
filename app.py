@@ -64,13 +64,16 @@ with st.sidebar:
 
 df = df_all[(df_all["semana"].dt.date >= start) & (df_all["semana"].dt.date <= end)]
 
-tabs = st.tabs(["📊 Resumen", "🔀 UA vs RTG", "📈 Evolución",
+tabs = st.tabs(["🎯 Funnel", "📊 Resumen", "🔀 UA vs RTG", "📈 Evolución",
                 "🔁 Repetición", "🧭 Journey", "💰 LTV cohorte"])
 
-# =========================================================================== #
-# Tab 0 — Resumen (Q1): Rocket vs. resto
-# =========================================================================== #
 with tabs[0]:
+    views.render_funnel(cfg, start, end)
+
+# =========================================================================== #
+# Tab 1 — Resumen (Q1): Rocket vs. resto
+# =========================================================================== #
+with tabs[1]:
     if df.empty:
         st.warning("No hay datos en el período seleccionado.")
     else:
@@ -142,15 +145,15 @@ with tabs[0]:
         st.download_button("Descargar tabla (CSV)", show.to_csv(index=False).encode("utf-8"),
                            file_name=f"analytics_lab_vix_{start}_{end}.csv", mime="text/csv")
 
-with tabs[1]:
-    views.render_q2(cfg, start, end)
 with tabs[2]:
-    views.render_q3(cfg, start, end)
+    views.render_q2(cfg, start, end)
 with tabs[3]:
-    views.render_q4(cfg, start, end)
+    views.render_q3(cfg, start, end)
 with tabs[4]:
-    views.render_q5(cfg, start, end)
+    views.render_q4(cfg, start, end)
 with tabs[5]:
+    views.render_q5(cfg, start, end)
+with tabs[6]:
     views.render_q6(cfg, start, end)
 
 theme.footer(f"{start:%d-%b-%Y} → {end:%d-%b-%Y}")
