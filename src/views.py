@@ -335,6 +335,10 @@ def render_q5(cfg: ClientConfig, start: date, end: date) -> None:
 # --------------------------------------------------------------------------- #
 # Funnel de suscripción (producto ViX reencuadrado)
 # --------------------------------------------------------------------------- #
+TIPO_LABEL = {"sub_monthly": "Mensual", "sub_annual": "Anual", "add_on_buyers": "Add-on"}
+TIPO_COLOR = {"Mensual": theme.VIOLET, "Anual": theme.BLUE, "Add-on": theme.TEAL}
+
+
 def render_funnel(cfg: ClientConfig, start: date, end: date) -> None:
     df, label, live = datasource.get_query(cfg, "funnel", start, end)
     _source_caption(label, live)
@@ -348,11 +352,20 @@ def render_funnel(cfg: ClientConfig, start: date, end: date) -> None:
     if df.empty:
         st.warning("Sin datos en el período."); return
 
-    # Filtro de país
+    # Filtros compactos (vacío = todos)
+    fc1, fc2 = st.columns(2)
     paises = sorted(df["country"].dropna().unique().tolist())
-    sel = st.multiselect("Países", paises, default=paises)
-    if sel:
-        df = df[df["country"].isin(sel)]
+    sel_p = fc1.multiselect("Países", paises, default=[],
+                            placeholder="Todos los países — o elegí uno o varios")
+    medias = df.groupby("canal")["installs"].sum().sort_values(ascending=False).index.tolist()
+    sel_m = fc2.multiselect("Medias", medias, default=[],
+                            placeholder="Todas las medias — o elegí una o varias")
+    if sel_p:
+        df = df[df["country"].isin(sel_p)]
+    if sel_m:
+        df = df[df["canal"].isin(sel_m)]
+    if df.empty:
+        st.warning("Sin datos para esos filtros."); return
 
     # Revenue de suscripción estimado (precio por país desde la config)
     pm = {c: (cfg.sub_price_usd(c, "monthly") or 0) for c in df["country"].unique()}
@@ -360,16 +373,16 @@ def render_funnel(cfg: ClientConfig, start: date, end: date) -> None:
     df["sub_rev"] = df["sub_monthly"] * df["country"].map(pm) + df["sub_annual"] * df["country"].map(pa)
 
     installs = df["installs"].sum()
-    subs = df["sub_monthly"].sum() + df["sub_annual"].sum()
+    n_month, n_annual, n_addon = df["sub_monthly"].sum(), df["sub_annual"].sum(), df["add_on_buyers"].sum()
+    subs = n_month + n_annual
     conv = (subs / installs * 100) if installs else np.nan
-    sub_rev = df["sub_rev"].sum()
-    addon_rev = df["add_on_revenue"].sum()
+    sub_rev, addon_rev = df["sub_rev"].sum(), df["add_on_revenue"].sum()
 
     st.caption("Revenue de suscripción **estimado**: se asigna el precio de ViX Premium por "
                "país (config). El MMP no trae el monto real. Add-on sí es revenue real.")
     k = st.columns(5)
     k[0].markdown(theme.kpi_card("Installs", integer(installs)), unsafe_allow_html=True)
-    k[1].markdown(theme.kpi_card("Suscriptores", integer(subs)), unsafe_allow_html=True)
+    k[1].markdown(theme.kpi_card("Suscripciones (mens+anual)", integer(subs)), unsafe_allow_html=True)
     k[2].markdown(theme.kpi_card("Conversión a suscripción", "—" if pd.isna(conv) else f"{conv:.2f}%"),
                   unsafe_allow_html=True)
     k[3].markdown(theme.kpi_card("Revenue suscripción (est.)", money(sub_rev)), unsafe_allow_html=True)
@@ -377,67 +390,72 @@ def render_funnel(cfg: ClientConfig, start: date, end: date) -> None:
 
     st.markdown('<div class="rl-grad-bar"></div>', unsafe_allow_html=True)
 
-    # Funnel install -> suscriptores
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("###### Funnel install → suscripción")
-        fun = pd.DataFrame({
-            "etapa": ["Installs", "Suscriptores"],
-            "devices": [installs, subs]})
-        figf = px.funnel(fun, x="devices", y="etapa",
-                         color_discrete_sequence=[theme.VIOLET])
-        figf.update_layout(height=300, **PLOT)
-        st.plotly_chart(figf, use_container_width=True)
-    with col2:
-        st.markdown("###### Mix de suscripción")
-        mix = pd.DataFrame({"plan": ["Mensual", "Anual"],
-                            "subs": [df["sub_monthly"].sum(), df["sub_annual"].sum()]})
-        figm = px.pie(mix, names="plan", values="subs", hole=0.55,
-                      color_discrete_sequence=[theme.BLUE, theme.TEAL])
-        figm.update_layout(height=300, **PLOT)
-        st.plotly_chart(figm, use_container_width=True)
+    # Conversiones por tipo (reemplaza el embudo skeweado)
+    st.markdown("###### Conversiones por tipo")
+    st.caption("De cada tipo: cuántos devices y qué % de los installs representa.")
+    tdf = pd.DataFrame({
+        "tipo": ["Mensual", "Anual", "Add-on"],
+        "devices": [n_month, n_annual, n_addon]})
+    tdf["pct_installs"] = 100 * tdf["devices"] / installs if installs else np.nan
+    tdf = tdf.sort_values("devices")
+    figt = px.bar(tdf, x="devices", y="tipo", orientation="h", color="tipo",
+                  color_discrete_map=TIPO_COLOR, text="devices",
+                  labels={"devices": "Devices", "tipo": ""})
+    figt.update_traces(texttemplate="%{x:,.0f}", textposition="outside",
+                       customdata=tdf[["pct_installs"]],
+                       hovertemplate="%{y}<br>%{x:,.0f} devices<br>%{customdata[0]:.2f}% de installs<extra></extra>")
+    figt.update_layout(height=260, **PLOT, showlegend=False)
+    st.plotly_chart(figt, use_container_width=True)
 
     # Revenue de suscripción por país
     st.markdown("###### Revenue de suscripción estimado por país")
     byc = df.groupby("country", as_index=False).agg(
         sub_monthly=("sub_monthly", "sum"), sub_annual=("sub_annual", "sum"),
-        sub_rev=("sub_rev", "sum"), installs=("installs", "sum"))
-    byc["conv_pct"] = 100 * (byc["sub_monthly"] + byc["sub_annual"]) / byc["installs"].replace(0, np.nan)
-    byc = byc.sort_values("sub_rev", ascending=True)
+        sub_rev=("sub_rev", "sum"), installs=("installs", "sum")).sort_values("sub_rev", ascending=True)
     figc = px.bar(byc.tail(15), x="sub_rev", y="country", orientation="h",
                   color_discrete_sequence=[theme.VIOLET],
                   labels={"sub_rev": "Revenue suscripción est. (USD)", "country": ""})
     figc.update_layout(height=430, **PLOT)
     st.plotly_chart(figc, use_container_width=True)
 
-    # Evolución semanal de suscriptores + revenue estimado
+    # Evolución semanal — suscripciones abiertas por tipo
     st.markdown("###### Evolución semanal")
-    metric = st.selectbox("Métrica", ["suscriptores", "sub_rev", "installs"],
-                          format_func=lambda m: {"suscriptores": "Suscriptores",
-                          "sub_rev": "Revenue suscripción est. (USD)", "installs": "Installs"}[m])
-    ev = df.copy()
-    ev["suscriptores"] = ev["sub_monthly"] + ev["sub_annual"]
-    evg = ev.groupby("semana", as_index=False)[metric].sum()
-    yf = "$%{y:,.0f}" if metric == "sub_rev" else "%{y:,.0f}"
-    fige = px.area(evg, x="semana", y=metric, color_discrete_sequence=[theme.VIOLET],
-                   labels={metric: "", "semana": ""})
-    fige.update_traces(hovertemplate="%{x|%d-%b-%Y}<br>" + yf + "<extra></extra>")
-    fige.update_layout(height=320, **PLOT)
+    metric = st.selectbox(
+        "Métrica", ["por_tipo", "sub_rev", "installs"],
+        format_func=lambda m: {"por_tipo": "Suscripciones por tipo (mens/anual/add-on)",
+                               "sub_rev": "Revenue suscripción est. (USD)", "installs": "Installs"}[m])
+    if metric == "por_tipo":
+        ev = (df.groupby("semana", as_index=False)[["sub_monthly", "sub_annual", "add_on_buyers"]].sum()
+                .melt(id_vars="semana", var_name="tipo", value_name="v"))
+        ev["tipo"] = ev["tipo"].map(TIPO_LABEL)
+        fige = px.area(ev, x="semana", y="v", color="tipo", color_discrete_map=TIPO_COLOR,
+                       labels={"v": "Devices", "semana": "", "tipo": ""})
+        fige.update_traces(hovertemplate="<b>%{fullData.name}</b><br>%{x|%d-%b-%Y}<br>%{y:,.0f}<extra></extra>")
+        fige.update_layout(height=340, **PLOT, legend=dict(orientation="h", y=-0.2))
+    else:
+        evg = df.groupby("semana", as_index=False)[metric].sum()
+        yf = "$%{y:,.0f}" if metric == "sub_rev" else "%{y:,.0f}"
+        fige = px.area(evg, x="semana", y=metric, color_discrete_sequence=[theme.VIOLET],
+                       labels={metric: "", "semana": ""})
+        fige.update_traces(hovertemplate="%{x|%d-%b-%Y}<br>" + yf + "<extra></extra>")
+        fige.update_layout(height=340, **PLOT)
     st.plotly_chart(fige, use_container_width=True)
 
-    # Por canal: quién trae suscriptores y a qué tasa
-    st.markdown("###### Suscriptores por canal")
+    # Por canal: todas las suscripciones abiertas por tipo
+    st.markdown("###### Suscripciones por canal (todos los tipos)")
     bych = df.groupby("canal", as_index=False).agg(
-        installs=("installs", "sum"), sub_monthly=("sub_monthly", "sum"),
-        sub_annual=("sub_annual", "sum"), sub_rev=("sub_rev", "sum"))
-    bych["suscriptores"] = bych["sub_monthly"] + bych["sub_annual"]
-    bych["conv_pct"] = 100 * bych["suscriptores"] / bych["installs"].replace(0, np.nan)
-    bych = bych[bych["suscriptores"] > 0].sort_values("suscriptores", ascending=False)
+        installs=("installs", "sum"), mensual=("sub_monthly", "sum"),
+        anual=("sub_annual", "sum"), add_on=("add_on_buyers", "sum"),
+        sub_rev=("sub_rev", "sum"), add_on_rev=("add_on_revenue", "sum"))
+    bych["total_susc"] = bych["mensual"] + bych["anual"]
+    bych["conv_pct"] = 100 * bych["total_susc"] / bych["installs"].replace(0, np.nan)
+    bych = bych[(bych["total_susc"] > 0) | (bych["add_on"] > 0)].sort_values("total_susc", ascending=False)
     st.dataframe(
-        bych[["canal", "installs", "suscriptores", "conv_pct", "sub_rev"]].head(20),
+        bych[["canal", "installs", "mensual", "anual", "add_on", "conv_pct", "sub_rev", "add_on_rev"]].head(25),
         use_container_width=True, hide_index=True, column_config={
             "conv_pct": st.column_config.NumberColumn("conversión %", format="%.2f%%"),
-            "sub_rev": st.column_config.NumberColumn("revenue susc. est.", format="$%.0f")})
+            "sub_rev": st.column_config.NumberColumn("revenue susc. est.", format="$%.0f"),
+            "add_on_rev": st.column_config.NumberColumn("revenue add-on", format="$%.0f")})
 
 
 def _mes_idx(s: pd.Series) -> pd.Series:
